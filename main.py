@@ -13,16 +13,15 @@ motorR = Motor(forward=12, backward=13)
 GYRO_ADDR = 0x69
 bus = smbus.SMBus(1)
 
-# BMX055 Accl address, 0x19
+# BMX055
+# Data sheet -> https://www.mouser.jp/datasheet/2/783/BST-BMX055-DS000-1509552.pdf
+# Acceleration address, 0x19
 # Select PMU_Range register, 0x0F(15)
 #       0x03(03)    Range = +/- 2g
 bus.write_byte_data(0x19, 0x0F, 0x03)
-# BMX055 Accl address, 0x19
 # Select PMU_BW register, 0x10(16)
 #       0x08(08)    Bandwidth = 7.81 Hz
-#       -> DataSheet Page 27
 bus.write_byte_data(0x19, 0x10, 0x08)
-# BMX055 Accl address, 0x19
 # Select PMU_LPW register, 0x11(17)
 #       0x00(00)    Normal mode, Sleep duration = 0.5ms
 bus.write_byte_data(0x19, 0x11, 0x00)
@@ -30,15 +29,13 @@ bus.write_byte_data(0x19, 0x11, 0x00)
 time.sleep(0.5)
 
 
-# BMX055 Gyro address, 0x69
+# Gyro address, 0x69
 # Select Range register, 0x0F(15)
 #       0x04(04)    Full scale = +/- 125 degree/s
 bus.write_byte_data(0x69, 0x0F, 0x04)
-# BMX055 Gyro address, 0x69
 # Select Bandwidth register, 0x10(16)
 #       0x07(07)    ODR = 100 Hz
 bus.write_byte_data(0x69, 0x10, 0x07)
-# BMX055 Gyro address, 0x69
 # Select LPM1 register, 0x11(17)
 #       0x00(00)    Normal mode, Sleep duration = 2ms
 bus.write_byte_data(0x69, 0x11, 0x00)
@@ -132,61 +129,46 @@ i = 0
 lastErr = 0
 errSum = 0
 Kp = 30
-Ki = 100
-Kd = 100
+Ki = 150
+Kd = 150
 
 preTime = time.time()
 
 offsetGyro, offsetAngle = setup()
 offsetGyro = 0
-# offsetAngle = 0
+offsetAngle = 2
 angle = 90 - offsetAngle
 angleGyro = angle
 
 while True:
 
-    # 0.00505304336548
     xAccl, yAccl, zAccl = accl()
     xGyro, yGyro, zGyro = gyro()
 
     now = time.time()
 
     dt = (now - preTime)
-    # dt = 0.001
     preTime = now
-
-    # K = K / (K + dt)  # 旧設定値 0.9996
-    # print "K = %f" % (K)
 
     angleAccl = np.arctan2(
         zAccl, yAccl) * 180 / 3.141592 - offsetAngle
 
     K = 0.996
-    # if abs(xGyro) < 10:
-    #     K = 0.99
 
+    # Full scale = +/- 125 degree/s
     # 125 / 32766 = 0.003815
-    # 2000 / 32766 = 0.061039
-    # 1000 / 32766 = 0.122078
-    # xGyro = xGyro * 0.003815  # Full scale = +/- 125 degree/s
-    # yGyro = yGyro * 0.003815  # Full scale = +/- 125 degree/s
-    # zGyro = zGyro * 0.003815  # Full scale = +/- 125 degree/s
     xGyro *= -1
     dGyro = (xGyro) * 0.003815 * dt
     angleGyro += dGyro
     angle = K * (angle + dGyro) + (1 - K) * angleAccl
     # print "angleGyro=%f angleAccl=%f angle=%f" % (angleGyro, angleAccl, angle)
 
+    # PID制御
+    # Proportional=比例、Integral=積分、Differential=微分
     error = angle / 90 - 1  # P成分：傾き0～180度 → -1～1
-    errSum += error * dt
+    errSum += error * dt  # I成分
     dErr = (error - lastErr) / dt / 125  # D成分：角速度±125dps → -1～1
     u = Kp * error + Ki * errSum + Kd * dErr
 
     lastErr = error
     move(u)
-
-    # print(
-    #     'Gyro= ({:>+13.4f}, {:>+13.4f}, {:>+13.4f})'.format(xGyro, yGyro, zGyro))
-    # print(
-    #     'Accl= ({:>+13.4f}, {:>+13.4f}, {:>+13.4f})'.format(xAccl, yAccl, zAccl))
-    # time.sleep(0.01)
